@@ -1,0 +1,30 @@
+{
+  "favorites": [],
+  "custom": {
+    "morning": {
+      "name": "清晨苏醒",
+      "description": "柔和的古典和轻音乐",
+      "keywords": ["钢琴", "古典", "轻音乐", "morning classical"]
+    },
+    "deepwork": {
+      "name": "深度工作",
+      "description": "无干扰的纯音乐",
+      "keywords": ["纯音乐", "钢琴曲", "chillhop study"]
+    },
+    "evening": {
+      "name": "晚间放松",
+      "description": "爵士和巴萨诺瓦",
+      "keywords": ["jazz piano", "bossa nova", "smooth jazz"]
+    },
+    "rainy": {
+      "name": "雨天歌单",
+      "description": "适合雨天的后摇和电影原声",
+      "keywords": ["post-rock", "soundtrack", "melancholic piano"]
+    },
+    "sleep": {
+      "name": "助眠",
+      "description": "极简环境音乐",
+      "keywords": ["ambient", "minimal piano", "sleep music"]
+    }
+  }
+}

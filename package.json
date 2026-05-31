@@ -1,0 +1,21 @@
+{
+  "name": "claudio",
+  "version": "1.0.0",
+  "description": "Claudio · Personal AI Music Radio",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "python app.py"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "NeteaseCloudMusicApi": "^4.32.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.0"
+  }
+}

@@ -1,0 +1,47 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# API Keys
+config.json
+.env
+.netease_cookie
+
+# Data
+state.db
+state.db-shm
+state.db-wal
+cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp / generated
+ws_debug.log
+*.zip
+*.ps1
+*.lnk
+
+# Personal
+.claude/
+claude-vision-skill/
+wechat_*.png
+Ryan.png
+Claudio头像.png
+我的头像.jpg
+e.zip
+electron-official.zip
+
+# Claude local config
+CLAUDE.md
+
+# User data
+user/taste.md.bak
+user/liked.md
+static/avatar-user.jpg
+templates/test_tts.html

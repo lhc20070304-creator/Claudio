@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b10">
+<link rel="manifest" href="/static/manifest.json">
+<title>Claudio</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body{% if desktop %} class="desktop"{% endif %}>
+
+<div class="card-aura" id="cardAura">
+<div class="card" id="appRoot" data-theme="dark">
+    <canvas class="dot-grid-canvas" id="dotGridCanvas"></canvas>
+    <!-- Nav -->
+    <div class="nav-bar">
+        <div class="nav-left">
+            <div class="nav-avatar">
+                <img src="/static/ryan.png" alt="Claudio">
+            </div>
+            <div class="nav-brand-wrap">
+                <span class="nav-brand">Claudio</span>
+                <div class="fm-status-bar" id="fmStatusBar" style="display:none">
+                    <span class="fm-status-dot" id="fmStatusDot"></span>
+                    <span class="fm-status-text" id="fmStatusText">Pause</span>
+                </div>
+            </div>
+        </div>
+        <div class="nav-right" id="navRightBox">
+            <button class="nav-btn" type="button" id="navLogin">LOGIN</button>
+            <div class="theme-toggle" id="themeToggle">
+                <span class="toggle-opt" data-theme="light">LIGHT</span>
+                <span class="toggle-opt active" data-theme="dark">DARK</span>
+            </div>
+            <span class="nav-time" id="navTime">00:00</span>
+        </div>
+    </div>
+
+    <!-- Time + ON AIR -->
+    <div class="header-time" id="headerTime">
+        <div class="time" id="time">00:00</div>
+        <div class="date-row">
+            <span class="weekday" id="weekday">Monday</span>
+        </div>
+        <div class="date-row">
+            <span class="date" id="date">01 JAN 2026</span>
+        </div>
+        <div class="onair">
+            <span class="onair-dot"></span>
+            <span>ON AIR</span>
+        </div>
+    </div>
+
+    <!-- ═══ Page Slider ═══ -->
+    <div class="slider-frame">
+        <div class="slider-track" id="sliderTrack">
+            <!-- PAGE: FM -->
+            <div class="page" id="fmPage">
+                <div class="fm-audio-bar" id="fmAudioBar"></div>
+                <div class="fm-program" id="fmProgram">
+                    <!-- Episode header -->
+                    <div class="fm-ep-header">
+                        <div class="fm-ep-title" id="fmEpTitle">Claudio's Late Night</div>
+                        <div class="fm-ep-sub" id="fmEpSub">A voice story with music — with Claudio</div>
+                        <div class="fm-ep-listen" id="fmEpListen">
+                            <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/><polygon points="10,8 16,12 10,16" fill="currentColor"/></svg>
+                            <span id="fmEpSong">—</span>
+                        </div>
+                    </div>
+                    <!-- Playback bar -->
+                    <div class="fm-playbar" id="fmPlaybar">
+                        <button class="fm-play-btn" type="button" id="fmPlayBtn" title="Play">
+                            <svg class="fm-icon-play" viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
+                            <svg class="fm-icon-pause" viewBox="0 0 24 24"><rect x="5" y="3" width="5" height="18"/><rect x="14" y="3" width="5" height="18"/></svg>
+                        </button>
+                        <div class="fm-progress-track" id="fmProgressTrack">
+                            <div class="fm-progress-fill" id="fmProgressFill"></div>
+                        </div>
+                        <span class="fm-time-display" id="fmTimeDisplay">0:00 / 0:00</span>
+                    </div>
+                    <!-- Transcript area -->
+                    <div class="fm-transcript" id="fmTranscript">
+                        <div class="fm-line" id="fmLine0">
+                            <span class="fm-timestamp">0:00</span>
+                            <div class="fm-text-wrap">
+                                <p class="fm-text-en">This is Claudio.</p>
+                                <p class="fm-text-zh">I'm Claudio。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PAGE: DJ -->
+            <div class="page" id="djPage">
+                <div class="player-strip">
+                    <div class="strip-left">
+                        <div class="audio-bars" id="audioBars">
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                        <div class="strip-track">
+                            <span class="track-name shiny-text true-focus" id="trackName">Claudio Radio</span>
+                            <span class="track-artist" id="trackArtist">Personal AI Radio</span>
+                        </div>
+                    </div>
+                    <div class="strip-controls">
+                        <button class="ctrl-btn" type="button" id="prevBtn" title="Previous">
+                            <svg viewBox="0 0 24 24"><polygon points="19,5 8,12 19,19"/><rect x="5" y="5" width="2" height="14"/></svg>
+                        </button>
+                        <button class="ctrl-btn ctrl-main star-border" type="button" id="playBtn" title="Play">
+                            <svg id="playIcon" viewBox="0 0 24 24"><polygon points="6,3 20,12 6,21"/></svg>
+                        </button>
+                        <button class="ctrl-btn" type="button" id="nextBtn" title="Next">
+                            <svg viewBox="0 0 24 24"><polygon points="5,5 16,12 5,19"/><rect x="17" y="5" width="2" height="14"/></svg>
+                        </button>
+                        <button class="ctrl-btn" type="button" id="stopBtn" title="Stop">
+                            <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14"/></svg>
+                        </button>
+                        <button class="ctrl-btn" type="button" id="likeBtn" title="Like">
+                            <svg viewBox="0 0 24 24"><path d="M12 21C12 21 3 14 3 8C3 5.5 5 3.5 7.5 3.5C9 3.5 10.5 4.5 12 6C13.5 4.5 15 3.5 16.5 3.5C19 3.5 21 5.5 21 8C21 14 12 21 12 21Z"/></svg>
+                        </button>
+                        <button class="ctrl-btn" type="button" id="hideBtn" title="Hide">HIDE</button>
+                        <button class="ctrl-btn" type="button" id="favBtn" title="Fav">FAV</button>
+                        <span class="vol-label">VOL</span>
+                        <input type="range" class="vol-slider" id="volSlider" min="0" max="100" value="80" title="Volume">
+                    </div>
+                </div>
+
+                <div class="progress-wrap">
+                    <span class="progress-time" id="currentTime">0:00</span>
+                    <div class="progress-track" id="progressTrack">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <span class="progress-time" id="duration">--:--</span>
+                </div>
+
+                <div class="queue-bar" id="queueBar">
+                    <div class="queue-left">
+                        <svg class="queue-chevron" id="queueChevron" viewBox="0 0 24 24" width="12" height="12">
+                            <polyline points="6,9 12,15 18,9" fill="none" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                        <span class="queue-label">QUEUE</span>
+                    </div>
+                    <div class="queue-right">
+                        <span class="queue-count" id="queueCount">0</span>
+                        <span class="queue-label">TRACKS</span>
+                    </div>
+                </div>
+                <div class="queue-list hidden" id="queueList"></div>
+
+                <div class="status-bar" id="statusBar">
+                    <div class="status-left">
+                        <span class="status-dot offline" id="statusDot"></span>
+                        <span class="status-name">Claudio</span>
+                    </div>
+                    <span class="status-state offline" id="statusState">OFFLINE</span>
+                </div>
+
+                <div class="chat-list" id="chatList"></div>
+                <div class="chat-bar">
+                    <input class="chat-input" id="chatInput" placeholder="Say something to the DJ...">
+                    <button class="chat-send" type="button" id="chatSend" title="Send">
+                        <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Bottom Bar: page nav only -->
+    <div class="bottom-bar">
+        <div class="page-nav">
+            <span class="page-nav-btn" id="navLeft">CLAUDIO FM</span>
+            <span class="page-nav-btn" id="navRight"></span>
+        </div>
+    </div>
+</div>
+</div>
+
+<audio id="audioPlayer" preload="none"></audio>
+<audio id="prefetchPlayer" preload="none" style="display:none"></audio>
+
+<script src="/static/dot-grid.js"></script>
+<script src="/static/player.js?v=4"></script>
+</body>
+</html>
