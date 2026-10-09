@@ -39,9 +39,9 @@
 
 | 模块 | 文件 | AI 贡献 |
 |------|------|---------|
-| 设计文档 | `PLAN.md` | 四阶段开发计划、DJ 能力图谱、技术架构 |
+| 路线图 | `ROADMAP.md` | DJ 能力图谱与实现状态、关键设计决策、人设设计 |
 | 部署文档 | `部署文档.md` | 环境配置、故障排查、生产部署建议 |
-| 启动脚本 | `启动Claudio.bat` / `launch.bat` | 一键环境检测 + 依赖安装 + 启动 |
+| 启动脚本 | `启动Claudio.bat` / `launch.vbs` | 一键环境检测 + 依赖安装 + 启动；VBS 版静默无控制台 |
 | DJ 人格 | `prompts/dj-persona.md` | 深夜电台 DJ 人设、回复风格、行为准则 |
 
 ---
@@ -120,15 +120,16 @@ Edge TTS（服务端 MP3 合成）+ Web Speech API（浏览器降级）。词级
 
 | 问题 | 说明 |
 |------|------|
-| 窗口无原生圆角 | pywebview 的 frameless 模式不支持 Win11 DWM 圆角，已准备 Electron 迁移方案 |
+| 桌面端仅 Windows | pywebview + DWM 圆角依赖 Win32 API，未做 macOS/Linux 适配 |
 | 音乐源单一 | 仅支持网易云音乐，无 Spotify / Apple Music 直连 |
 | 离线能力弱 | 依赖网易云 API 在线搜索，无本地音乐库 |
 | 无语音输入 | Web Speech API 语音控制未接入 |
-| 桌面端仅 Windows | pywebview 不支持 macOS/Linux |
+| TTS 无词级时间戳 | 当前为整句播报，逐词高亮尚未实现 |
+| 播放历史查询浅 | 只能按最近播放与频率查询，无法按年/季节回溯 |
 
 ### 5.2 后续计划
 
-1. **Electron 迁移**：透明窗口 + CSS 圆角 + 跨平台
+1. **启用 Electron 桌面壳**：`electron/main.js` 已实现透明无边框窗口，尚未接入启动器
 2. **Spotify API 接入**：多平台音乐源
 3. **语音唤醒**：Web Speech API 持续监听 + 关键词唤醒
 4. **音乐日记**：每日听歌统计 + AI 生成音乐小结

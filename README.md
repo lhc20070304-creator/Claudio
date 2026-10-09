@@ -4,7 +4,7 @@
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue)
-![React](https://img.shields.io/badge/Flask-backend-black)
+![Flask](https://img.shields.io/badge/Flask-backend-black)
 ![AI](https://img.shields.io/badge/AI-DeepSeek-purple)
 
 ---
@@ -20,33 +20,43 @@
 ### 🗣️ 自然语言控制
 | 能力 | 示例 |
 |------|------|
-| 基础指令 | "放点安静的" "换一首" "暂停" |
+| 基础指令 | "放点安静的" "换一首" "添加这首歌" |
 | 模糊搜索 | "找写代码的 BGM" "适合下雨天的歌" |
-| 歌曲介绍 | "这首歌讲什么的" "谁写的" |
 
 ### 🧠 品味引擎
 | 能力 | 说明 |
 |------|------|
-| 时段感知 | 早晨华语 / 工作纯音乐 / 晚间舒缓 |
-| 天气联动 | 下雨天推荐爵士 / 晴天推荐 Bossa Nova |
-| 心境判断 | "我有点低落" → 温暖的或陪你沉的 |
-| 历史回响 | "这是你 2018 年冬天常听的" |
+| 时段感知 | 当前时间/月份注入 System Prompt，配合日常节律切换风格 |
+| 心境判断 | "我有点低落" → 按情绪规则选择陪你沉或把你拉出来 |
+| 防重复推荐 | 跨 session 去重 + 7 天内高频歌曲降权 + 强制风格轮换 |
+| 品味蒸馏 | 分析网易云歌单 / Apple Music 数据 → AI 生成品味档案 |
 
 ### 🎙️ DJ 人格化
 | 能力 | 说明 |
 |------|------|
 | DJ 口吻 | 温柔文艺，像深夜电台主持人 |
 | 推荐理由 | 每次推歌附带"为什么" |
-| 歌曲故事 | 讲创作背景、风格特点 |
-| 场景模式 | "写代码模式" → 一键切风格 |
+| 对话记忆 | SQLite 持久化，跨重启记得聊过什么 |
 
 ### 🪽 陪伴体验
 | 能力 | 说明 |
 |------|------|
-| 音乐日记 | AI 生成每日听歌小结 |
 | FM 电台 | AI 撰写中英双语电台播报 + TTS 朗读 |
-| 品味蒸馏 | 分析歌单数据 → AI 生成品味档案 |
+| 收藏与喜欢 | 点赞自动归类风格写回 `user/liked.md`，参与后续推荐 |
 | 桌面置顶 | 始终浮在屏幕一角，办公时伴在身边 |
+
+---
+
+## 🗺️ 路线图
+
+以下能力已在设计文档中定义，**当前版本尚未实现**：
+
+- [ ] **歌曲介绍与歌曲故事** — 把当前播放曲目的歌词/元数据接入对话上下文（`music.get_lyric()` 已写好但尚未接入）
+- [ ] **天气联动** — 雨天推荐爵士、晴天推荐 Bossa Nova（后端已预留接收字段，缺前端天气来源）
+- [ ] **历史回响** — "这是你 2018 年冬天常听的"（需要按年/季节的历史查询）
+- [ ] **场景模式** — "写代码模式"一键切换风格预设
+- [ ] **音乐日记** — AI 生成每日听歌小结
+- [ ] **词级时间戳** — TTS 逐词高亮（现为整句播报）
 
 ---
 
@@ -54,7 +64,7 @@
 
 ```
 ┌──────────────────────────────────────────┐
-│  桌面窗口 (pywebview / Electron)          │
+│  桌面窗口 (pywebview)                     │
 │  ├── HTML/CSS/JS 单页前端                 │
 │  ├── 播放器 (audio API / 队列 / 进度)      │
 │  ├── 聊天面板 (WebSocket 实时对话)         │
@@ -75,9 +85,9 @@
 └──────────────────────────────────────────┘
 ```
 
----
-
-## 🚀 快速启动
+> **关于桌面壳：** 实际运行的是 **pywebview**（`desktop.py`，由 `启动Claudio.bat` 和 `launch.vbs` 调用）。
+> `electron/main.js` 是一份已写完但**未被任何启动器调用**的替代实现，可通过 `npm start` 手动运行。
+> 两者都启动同一套后端，只是窗口层不同。
 
 ### 前置要求
 - **Python 3.10+**
@@ -145,7 +155,9 @@ Claudio/
 │   ├── context.py           #   System Prompt 组装
 │   ├── state.py             #   SQLite 状态持久化
 │   ├── taste.py             #   品味蒸馏引擎
+│   ├── apple_import.py      #   Apple Music 数据导入
 │   ├── tts.py               #   TTS 语音合成
+│   ├── tts_worker.py        #   TTS 子进程（避开 asyncio 冲突）
 │   ├── router.py            #   意图路由
 │   └── scheduler.py         #   定时任务
 ├── services/
@@ -155,18 +167,24 @@ Claudio/
 ├── static/
 │   ├── player.js            #   播放器 + 聊天 + FM
 │   ├── style.css            #   深色主题样式
-│   └── dot-grid.js          #   背景粒子
+│   ├── dot-grid.js          #   背景粒子
+│   ├── sw.js                #   Service Worker 离线缓存
+│   ├── manifest.json        #   PWA 清单
+│   ├── ryan.png             #   DJ 头像
+│   └── avatar-user.jpg      #   用户头像（可自行替换）
 ├── prompts/                 # DJ 人格 Prompt
-│   ├── dj-persona.md
-│   └── emoji-library.md
+│   ├── dj-persona.md        #   人设
+│   ├── emoji-library.md     #   表情库
+│   ├── voice-prompt.md      #   电台播报风格
+│   └── avatar-prompt.md     #   头像生成提示词
 ├── user/                    # 用户语料
 │   ├── taste.md             #   音乐品味档案
 │   ├── routines.md          #   日常节律
 │   ├── mood-rules.md        #   情绪规则
-│   └── liked.md             #   点赞记录
+│   └── liked.md             #   点赞记录（运行时生成）
 ├── electron/
-│   └── main.js              # Electron 桌面壳
-└── PLAN.md                  # 设计文档
+│   └── main.js              # Electron 桌面壳（替代实现，需 npm start 手动运行）
+└── ROADMAP.md               # 路线图与设计文档
 ```
 
 ---
@@ -179,7 +197,7 @@ Claudio/
 - `brain/claude.py` — 多模型适配层
 - `brain/context.py` — 动态 System Prompt 组装
 - `brain/taste.py` — AI 品味蒸馏
-- `brain/tts.py` — Edge TTS 词级时间戳
+- `brain/tts.py` — Edge TTS 语音合成
 - `services/music.py` — 网易云 API 封装
 - `templates/index.html` — HTML 结构
 - `static/player.js` — 51KB 播放器逻辑
