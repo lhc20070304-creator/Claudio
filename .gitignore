@@ -32,9 +32,11 @@ netease_err.log
 .claude/
 claude-vision-skill/
 wechat_*.png
-Ryan.png
-Claudio头像.png
-我的头像.jpg
+
+# Root-level duplicates only — static/ copies are tracked and required at runtime
+/Ryan.png
+/Claudio头像.png
+/我的头像.jpg
 e.zip
 electron-official.zip
 
@@ -44,5 +46,4 @@ CLAUDE.md
 # User data
 user/taste.md.bak
 user/liked.md
-static/avatar-user.jpg
 templates/test_tts.html
