@@ -944,7 +944,9 @@ if("serviceWorker" in navigator){
             fmStopWordHL();
             function tick(){
                 if(!fmAudioCtx){fmStopWordHL();return;}
-                var t=fmAudioCtx.currentTime-t0, wi=0;
+                // wi starts at -1 so the leading silence before the first word
+                // lights nothing, rather than lighting word 0 early
+                var t=fmAudioCtx.currentTime-t0, wi=-1;
                 for(var k=0;k<times.length;k++){if(t>=times[k])wi=k;else break;}
                 highlightSpan(spans,wi);
                 fmHlRAF=requestAnimationFrame(tick);
