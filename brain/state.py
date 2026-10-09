@@ -83,6 +83,22 @@ class State:
         ).fetchall()
         return [{"song_name": r[0], "artist": r[1], "song_id": r[2]} for r in rows]
 
+    def get_global_recent_plays(self, limit: int = 50):
+        """跨所有 session 查询最近播放，解决 session cookie 丢失导致记忆空白的问题"""
+        rows = self.conn.execute(
+            "SELECT DISTINCT song_name, artist, song_id, MAX(id) as max_id FROM plays GROUP BY song_id ORDER BY max_id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [{"song_name": r[0], "artist": r[1], "song_id": r[2]} for r in rows]
+
+    def get_play_frequency(self, days: int = 7):
+        """统计最近 N 天内每首歌的播放次数，用于降权重复推荐"""
+        rows = self.conn.execute(
+            "SELECT song_name, artist, song_id, COUNT(*) as cnt FROM plays WHERE played_at > datetime('now', ?) GROUP BY song_id ORDER BY cnt DESC",
+            (f"-{days} days",),
+        ).fetchall()
+        return [{"song_name": r[0], "artist": r[1], "song_id": r[2], "count": r[3]} for r in rows]
+
     # ── plan ──
     def set_plan(self, day: str, summary: str):
         self.conn.execute(

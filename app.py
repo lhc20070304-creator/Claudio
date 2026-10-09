@@ -66,40 +66,86 @@ def api_memory_status():
 
 @app.route("/api/next")
 def api_next():
-    """GET /api/next — AI 根据品味推荐关键词 → 搜索 → 播放（不限于已有歌单）"""
+    """GET /api/next — AI 根据品味推荐关键词 → 搜索 → 播放（不限于已有歌单）
+
+    防重复机制：
+    1. 全局最近播放（跨 session）→ avoid list
+    2. 7天内播放频率 → 高频歌曲降权
+    3. 品味轮换提示 → 要求 AI 在不同风格间跳跃
+    """
     sid = _sid()
     weather = request.args.get("weather", "")
     now = datetime.now()
 
     system_prompt = build_system_prompt(sid, weather, now)
-    recent = state.get_recent_plays(sid, limit=15)
-    avoid = "\n".join(f"- {p['artist']} — {p['song_name']}" for p in recent) if recent else "(no recent plays)"
+
+    # ── ① 全局最近播放（跨 session，解决 cookie 丢失导致记忆空白）──
+    global_recent = state.get_global_recent_plays(limit=40)
+    avoid_list = "\n".join(
+        f"- {p['artist']} — {p['song_name']}" for p in global_recent
+    ) if global_recent else "(no recent plays)"
+
+    # ── ② 播放频率统计（7天内重复太多的歌直接警告）──
+    freq = state.get_play_frequency(days=7)
+    overplayed = [f for f in freq if f["count"] >= 3]
+    freq_warning = ""
+    if overplayed:
+        freq_warning = "\n## ⚠️ OVERPLAYED SONGS (played 3+ times this week — DO NOT recommend these AT ALL):\n"
+        freq_warning += "\n".join(
+            f"- {f['artist']} — {f['song_name']} (played {f['count']}×)"
+            for f in overplayed
+        )
+
+    # ── ③ 读取上次推荐的 genre，强制轮换 ──
+    last_genre_hint = ""
+    prev_recs = state.get_pref("last_recommended_genres", default=[])
+    if prev_recs:
+        last_genre_hint = f"\n## Genre rotation\nLast time you recommended genres/styles: {', '.join(prev_recs[-3:])}\nPick DIFFERENT genres this time. The listener has a diverse taste — USE ALL OF IT."
+
     days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
 
     user_prompt = (
         f"Time: {now.strftime('%H:%M')} {days[now.weekday()]}\n"
-        f"Recently played (do NOT repeat these artists or songs):\n{avoid}\n\n"
-        "Recommend 3 songs as a DJ. The listener has complained that you keep playing similar stuff.\n\n"
-        "What to do:\n"
-        "- Actually read the ENTIRE taste profile — every style, era, and artist in there is fair game. Don't fixate on one corner of it\n"
-        "- Be genuinely unpredictable. If you played R&B last time, go somewhere completely different this time. The listener wants to be surprised\n"
-        "- IMPORTANT: Do NOT play loud/aggressive music. No death metal, heavy rock, screamo, hardcore, punk, thrash, or harsh distorted guitars. The listener hates this\n"
-        "- keyword must be precise: 'Artist Songname' for specific tracks, or 'genre mood descriptor' for discovery searches\n\n"
-        "Output JSON: {\"say\": \"...\", \"play\": [{\"keyword\": \"...\", \"reason\": \"...\"}, ...]}"
+        f"## Recently played (DO NOT repeat ANY of these artists or songs):\n{avoid_list}\n"
+        f"{freq_warning}"
+        f"{last_genre_hint}\n\n"
+        "You are a DJ. Recommend 3 songs.\n\n"
+        "CRITICAL RULES:\n"
+        "1. READ the ENTIRE taste profile. The listener has MANY genres they love: R&B, phonk, indie electronic, fingerstyle guitar, guitar instrumentals, Chinese pop/rock, ambient, etc.\n"
+        "2. ROTATE GENRES. If the recently played list is full of one style, go somewhere COMPLETELY different. The listener wants to be surprised.\n"
+        "3. NEVER repeat any artist or song from the 'Recently played' list. NEVER recommend anything from the OVERPLAYED list.\n"
+        "4. Do NOT play loud/aggressive music: no death metal, heavy rock, screamo, hardcore, punk, thrash, or harsh distorted guitars.\n"
+        "5. If the taste profile has 6+ genres, you should cycle through ALL of them over time — don't camp on R&B/electronic.\n"
+        "6. Pick at least ONE song from an underrepresented genre in the recently played list.\n"
+        "7. keyword must be precise: 'Artist Songname' for specific tracks, or 'genre mood descriptor' for discovery.\n\n"
+        "Output JSON: {\"say\": \"...\", \"play\": [{\"keyword\": \"...\", \"reason\": \"...\", \"genre\": \"...\"}, ...]}"
     )
 
     result = brain.ask(system_prompt, user_prompt)
 
+    # ── 保存本次推荐的 genres 供下次轮换 ──
+    this_genres = []
+    for p in result.get("play", []):
+        if isinstance(p, dict) and p.get("genre"):
+            this_genres.append(p["genre"])
+    if this_genres:
+        all_genres = (prev_recs + this_genres)[-10:]  # 保留最近10次
+        state.set_pref("last_recommended_genres", all_genres)
+
     songs = []
     for p in result.get("play", []):
         if isinstance(p, dict) and "keyword" in p:
-            sr = music.search(p["keyword"], limit=3)
+            sr = music.search(p["keyword"], limit=5)
             if sr:
-                # 优先选第一个结果（通常是最热门/最匹配的），避开最近播放过的
-                recent_ids = {r.get("song_id", 0) for r in recent}
-                picked = sr[0]  # 默认第一个最准
+                # 黑名单：全局最近播放过的 ID + 高频播放过的 ID
+                recent_ids = {r.get("song_id", 0) for r in global_recent}
+                overplayed_ids = {f["song_id"] for f in overplayed}
+                blocked_ids = recent_ids | overplayed_ids
+
+                # 优先选不在黑名单中的结果
+                picked = sr[0]  # 默认第一个
                 for candidate in sr:
-                    if candidate["id"] not in recent_ids:
+                    if candidate["id"] not in blocked_ids:
                         picked = candidate
                         break
                 url = music.get_song_url(picked["id"])
@@ -197,12 +243,32 @@ def api_chat():
     weather = data.get("weather", "")
     system_prompt = build_system_prompt(sid, weather)
 
+    # ── 全局最近播放 + 频率统计（防重复）──
+    global_recent = state.get_global_recent_plays(limit=40)
+    avoid_str = "\n".join(
+        f"- {p['artist']} — {p['song_name']}" for p in global_recent
+    ) if global_recent else "(none)"
+    freq = state.get_play_frequency(days=7)
+    overplayed = [f for f in freq if f["count"] >= 3]
+    overplayed_str = "\n".join(
+        f"- {f['artist']} — {f['song_name']} ({f['count']}×)" for f in overplayed
+    ) if overplayed else "(none)"
+
     # Detect music intent — OVERRIDE for these commands
     lower = user_input.lower()
     is_play = any(w in lower for w in ["play ", "put on ", "i want to hear", "放", "播"])
     is_add  = any(w in lower for w in ["add ", "queue", "添加", "加点"])
     if is_play:
-        user_prompt = f'PLAY COMMAND: {user_input}\n\nReturn JSON with a play array containing the requested song. Example: {{"say":"short DJ intro","play":[{{"keyword":"Artist Songname"}}]}}'
+        user_prompt = (
+            f'PLAY COMMAND: {user_input}\n\n'
+            f'Recently played (DO NOT repeat):\n{avoid_str}\n\n'
+            f'Overplayed this week (DO NOT play):\n{overplayed_str}\n\n'
+            'Return JSON with a play array containing the requested song. '
+            'If the user just says "play something" / "放首歌", recommend something '
+            'DIFFERENT from the recently played and overplayed lists. '
+            'Pick a genre they haven\'t heard recently.\n'
+            'Example: {"say":"short DJ intro","play":[{"keyword":"Artist Songname"}]}'
+        )
     elif is_add:
         user_prompt = f'ADD COMMAND: {user_input}\n\nReturn JSON with a play array. Current track keeps playing. Example: {{"say":"added!","play":[{{"keyword":"Artist Songname"}}]}}'
     else:
@@ -212,15 +278,26 @@ def api_chat():
     reply = result.get("say", "Hmm… let me think about what to play next.")
     state.add_message(sid, "assistant", reply)
 
+    # 黑名单：全局最近播放 + 高频播放
+    blocked_ids = {r.get("song_id", 0) for r in global_recent}
+    blocked_ids |= {f["song_id"] for f in overplayed}
+
     songs = []
     for p in result.get("play", []):
         if isinstance(p, dict) and "keyword" in p:
-            sr = music.search(p["keyword"], limit=3)
+            sr = music.search(p["keyword"], limit=5)
             if sr:
-                ss = sr[0]
-                ss["url"] = music.get_song_url(ss["id"])
-                songs.append(ss)
-                state.add_play(sid, ss["name"], ss["artist"], ss["id"])
+                # 优先选不在黑名单中的
+                picked = sr[0]
+                for candidate in sr:
+                    if candidate["id"] not in blocked_ids:
+                        picked = candidate
+                        break
+                url = music.get_song_url(picked["id"])
+                if url:
+                    picked["url"] = url
+                    songs.append(picked)
+                    state.add_play(sid, picked["name"], picked["artist"], picked["id"])
 
     return jsonify({"reply": reply, "action": "play" if songs else "say",
         "songs": songs, "reason": result.get("reason", ""), "segue": result.get("segue", "")})
@@ -281,12 +358,34 @@ def ws_stream(ws):
             # Natural language → AI (multi-turn memory)
             weather = data.get("weather", "")
             system_prompt = build_system_prompt(sid, weather)
+
+            # ── 全局最近播放 + 频率统计（防重复）──
+            global_recent = state.get_global_recent_plays(limit=40)
+            avoid_str = "\n".join(
+                f"- {p['artist']} — {p['song_name']}" for p in global_recent
+            ) if global_recent else "(none)"
+            freq = state.get_play_frequency(days=7)
+            overplayed = [f for f in freq if f["count"] >= 3]
+            overplayed_str = "\n".join(
+                f"- {f['artist']} — {f['song_name']} ({f['count']}×)" for f in overplayed
+            ) if overplayed else "(none)"
+
             # Detect music intent — OVERRIDE system prompt for these
             _lower = user_input.lower()
             is_play = any(w in _lower for w in ["play ", "put on ", "i want to hear", "放", "播"])
             is_add  = any(w in _lower for w in ["add ", "queue", "添加", "加点"])
             if is_play:
-                user_prompt = f'PLAY COMMAND: {user_input}\n\nReturn JSON with a play array containing the requested song. Example: {{"say":"short DJ intro","play":[{{"keyword":"Artist Songname"}}]}}'
+                user_prompt = (
+                    f'PLAY COMMAND: {user_input}\n\n'
+                    f'Recently played (DO NOT repeat):\n{avoid_str}\n\n'
+                    f'Overplayed this week (DO NOT play):\n{overplayed_str}\n\n'
+                    'Return JSON with a play array containing the requested song. '
+                    'If the user asks for a specific song, use that exact song. '
+                    'If the user just says "play something" / "放首歌", recommend something '
+                    'DIFFERENT from the recently played and overplayed lists. '
+                    'Pick a genre the listener hasn\'t heard recently.\n'
+                    'Example: {"say":"short DJ intro","play":[{"keyword":"Artist Songname"}]}'
+                )
             elif is_add:
                 user_prompt = f'ADD COMMAND: {user_input}\n\nReturn JSON with a play array. Current track keeps playing. Example: {{"say":"added!","play":[{{"keyword":"Artist Songname"}}]}}'
             else:
@@ -304,22 +403,31 @@ def ws_stream(ws):
             state.add_message(sid, "user", user_input)
             state.add_message(sid, "assistant", reply)
 
+            # 黑名单：全局最近播放 + 高频播放
+            blocked_ids = {r.get("song_id", 0) for r in global_recent}
+            blocked_ids |= {f["song_id"] for f in overplayed}
+
             songs = []
             for p in result.get("play", []):
                 if isinstance(p, dict) and "keyword" in p:
                     kw = p["keyword"]
-                    sr = music.search(kw, limit=3)
+                    sr = music.search(kw, limit=5)
                     with open(_dlog, "a", encoding="utf-8") as _f:
                         _f.write(f"search kw={kw} results={len(sr) if sr else 0}\n")
                     if sr:
-                        ss = sr[0]
-                        url = music.get_song_url(ss["id"])
+                        # 优先选不在黑名单中的
+                        picked = sr[0]
+                        for candidate in sr:
+                            if candidate["id"] not in blocked_ids:
+                                picked = candidate
+                                break
+                        url = music.get_song_url(picked["id"])
                         with open(_dlog, "a", encoding="utf-8") as _f:
-                            _f.write(f"url for {ss['id']}: {url[:60] if url else 'NONE'}\n")
+                            _f.write(f"url for {picked['id']}: {url[:60] if url else 'NONE'}\n")
                         if url:
-                            ss["url"] = url
-                            songs.append(ss)
-                            state.add_play(sid, ss["name"], ss["artist"], ss["id"])
+                            picked["url"] = url
+                            songs.append(picked)
+                            state.add_play(sid, picked["name"], picked["artist"], picked["id"])
 
             ws_msg = json.dumps({"reply": reply, "action": "play" if songs else "say",
                 "songs": songs, "reason": result.get("reason", ""), "segue": result.get("segue", "")},
@@ -385,7 +493,7 @@ def api_unlike():
 
 def _update_liked_md(song_name, artist, song_id):
     """Append a liked song to user/liked.md with AI genre classification."""
-    import os as _os
+    import os as _os, re as _re
     liked_path = _os.path.join(_os.path.dirname(__file__), "user", "liked.md")
     _os.makedirs(_os.path.dirname(liked_path), exist_ok=True)
 
@@ -412,23 +520,32 @@ def _update_liked_md(song_name, artist, song_id):
         with open(liked_path, "r", encoding="utf-8") as f:
             existing = f.read().splitlines()
 
-    # Rebuild with new like
-    header = "# Liked Songs — Claudio's Learned Preferences"
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Normalize for dedup: extract just artist — song, ignore genre tags
+    def _key(line):
+        """Extract 'Artist — Song' from a line like '- Artist — Song  [genre]'"""
+        s = line.strip().lstrip("-").strip()
+        # Remove trailing genre tag like "  [R&B]" or "  [jazz pop]"
+        s = _re.sub(r'\s+\[.*?\]\s*$', '', s)
+        return s.strip().lower()
+
+    new_key = _key(f"- {artist} — {song_name}")
     new_line = f"- {artist} — {song_name}" + (f"  [{genre}]" if genre else "")
 
-    # Inject new line
+    # Rebuild: dedup by artist+song key
+    header = "# Liked Songs — Claudio's Learned Preferences"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     lines = [header, f"<!-- Last updated: {now_str} -->", ""]
-    found = False
+    seen = {new_key}
+    lines.append(new_line)
     for line in existing:
         if line.startswith("#") or line.startswith("<!--"):
             continue
-        if line.strip() == new_line.strip():
-            found = True
-        if line.strip():
+        if not line.strip():
+            continue
+        key = _key(line)
+        if key and key not in seen:
+            seen.add(key)
             lines.append(line)
-    if not found:
-        lines.append(new_line)
 
     with open(liked_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

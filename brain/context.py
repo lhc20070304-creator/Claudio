@@ -39,11 +39,11 @@ def build_system_prompt(session_id: str = None, weather: str = "", now: datetime
         env_lines.append(f"Weather: {weather}")
     env_context = "\n".join(env_lines)
 
-    # ④ Recent plays
-    play_lines = ["## Recent Plays (avoid repeating)"]
+    # ④ Recent plays (both session-specific AND global cross-session)
+    play_lines = ["## Recent Plays (avoid repeating — from ALL sessions)"]
     if session_id:
-        plays = state.get_recent_plays(session_id, limit=10)
-        for p in plays:
+        global_plays = state.get_global_recent_plays(limit=30)
+        for p in global_plays:
             play_lines.append(f"- {p['artist']} — {p['song_name']}")
     play_context = "\n".join(play_lines)
 
