@@ -95,7 +95,25 @@ def nuke_borders():
         print(f"[desktop] nuke error: {e}")
 
 
-def wait_port(port, timeout=30):
+def kill_port(port):
+    """杀掉占用指定端口的进程"""
+    try:
+        r = subprocess.run(
+            f'netstat -ano | findstr :{port} | findstr LISTENING',
+            shell=True, capture_output=True, text=True, timeout=5,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        for line in r.stdout.strip().split('\n'):
+            parts = line.split()
+            if parts:
+                pid = parts[-1]
+                subprocess.run(['taskkill', '/F', '/PID', pid],
+                    capture_output=True, creationflags=CREATE_NO_WINDOW)
+    except Exception:
+        pass
+
+
+def wait_port(port, timeout=60):
     for _ in range(timeout):
         try:
             s = socket.create_connection(("127.0.0.1", port), timeout=1)
@@ -107,17 +125,44 @@ def wait_port(port, timeout=30):
 
 
 def start_netease():
-    return subprocess.Popen(
-        ["node", "node_modules/NeteaseCloudMusicApi/app.js"],
-        cwd=BASE_DIR,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        creationflags=CREATE_NO_WINDOW,
-    )
+    """启动网易云 API，失败自动重试"""
+    err_log = os.path.join(BASE_DIR, "netease_err.log")
+    for attempt in range(3):
+        proc = subprocess.Popen(
+            ["node", "node_modules/NeteaseCloudMusicApi/app.js"],
+            cwd=BASE_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=open(err_log, "a") if attempt == 0 else subprocess.DEVNULL,
+            creationflags=CREATE_NO_WINDOW,
+        )
+        # 等它起来
+        for _ in range(40):
+            try:
+                s = socket.create_connection(("127.0.0.1", 3000), timeout=1)
+                s.close()
+                return proc
+            except (socket.error, ConnectionRefusedError):
+                time.sleep(1)
+        # 超时，杀掉重试
+        proc.kill()
+        time.sleep(1)
+    return None
 
 
 def start_flask():
     from app import app
     app.run(host="127.0.0.1", port=8080, debug=False)
+
+
+def watchdog(proc_ref):
+    """守护线程：Netease 挂了自动重启"""
+    while True:
+        time.sleep(10)
+        p = proc_ref[0]
+        if p and p.poll() is not None:
+            proc_ref[0] = start_netease()
+            if proc_ref[0] is None:
+                break
 
 
 class WindowAPI:
@@ -135,27 +180,28 @@ class WindowAPI:
 
 
 def main():
-    # Start both services in parallel
+    # 0. 清理可能残留的旧进程
+    kill_port(3000)
+    kill_port(8080)
+    time.sleep(1)
+
+    # 1. 启动网易云 API（带重试，最多等 60 秒）
     netease_proc = start_netease()
+    if netease_proc is None:
+        sys.exit(1)
+
+    # 2. 并行启动 Flask
     flask_thread = threading.Thread(target=start_flask, daemon=True)
     flask_thread.start()
 
-    # Wait for both ports in parallel
-    results = {}
-    def wait(n, port):
-        results[port] = wait_port(port)
+    # 3. 等 Flask
+    if not wait_port(8080, timeout=30):
+        netease_proc.kill()
+        sys.exit(1)
 
-    t1 = threading.Thread(target=wait, args=(0, 3000), daemon=True)
-    t2 = threading.Thread(target=wait, args=(0, 8080), daemon=True)
-    t1.start(); t2.start()
-    t1.join(timeout=30); t2.join(timeout=30)
-
-    if not results.get(3000):
-        print("[desktop] ERROR: Netease failed")
-        netease_proc.kill(); sys.exit(1)
-    if not results.get(8080):
-        print("[desktop] ERROR: Flask failed")
-        netease_proc.kill(); sys.exit(1)
+    # 4. 启动 Netease 守护
+    netease_ref = [netease_proc]
+    threading.Thread(target=watchdog, args=(netease_ref,), daemon=True).start()
 
     # Apply DWM rounded corners after a short delay
     threading.Timer(0.5, nuke_borders).start()

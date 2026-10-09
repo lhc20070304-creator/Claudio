@@ -23,6 +23,7 @@ Thumbs.db
 
 # Temp / generated
 ws_debug.log
+netease_err.log
 *.zip
 *.ps1
 *.lnk
