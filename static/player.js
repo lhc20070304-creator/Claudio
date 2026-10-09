@@ -904,48 +904,52 @@ if("serviceWorker" in navigator){
         window.highlightFmLine(idx);
         fmSpeaking=true;
         updateFmStatusBar();
-        function highlightWord(wi){
+        function highlightSpan(spans, wi){
+            if(wi===fmHlWord)return;
+            if(fmHlWord>=0&&fmHlWord<spans.length)spans[fmHlWord].classList.remove("fm-word-hl");
+            if(wi>=0&&wi<spans.length)spans[wi].classList.add("fm-word-hl");
+            fmHlWord=wi;
+        }
+        // The highlight reads the audio clock every frame instead of chaining
+        // setTimeouts. A timeout lands a few ms late each time and the error
+        // compounds word by word, which is why the green word drifted further
+        // and further behind the voice down a line. Sampling currentTime means
+        // a slow frame can only delay an update, never desync it.
+        function startWordHL(buf, boundaries, t0){
             var line=document.getElementById("fmLine"+idx);
             if(!line)return;
             var enEl=line.querySelector(".fm-text-en");
             if(!enEl)return;
             var spans=enEl.querySelectorAll("span");
-            for(var i=0;i<spans.length;i++)spans[i].classList.remove("fm-word-hl");
-            if(wi<spans.length)spans[wi].classList.add("fm-word-hl");
-        }
-        function startWordHL(buf, boundaries){
-            var words=text.split(/\s+/);
-            if(words.length<2)return;
-            // use precise word boundaries from server if available
-            if(boundaries&&boundaries.length>0){
-                var wi=0;
-                function nextBoundary(){
-                    if(wi>=boundaries.length){return;} // keep last word highlighted, onended clears it
-                    highlightWord(wi);
-                    wi++;
-                    if(wi<boundaries.length){
-                        var delayMs=(boundaries[wi].offset-boundaries[wi-1].offset)/10000;
-                        fmWordTimer=setTimeout(nextBoundary,Math.max(50,delayMs));
-                    }
-                    // last word: keep highlighted, cleared by onended/fmClearWordHL in playBuf
-                }
-                nextBoundary();
+            var n=spans.length;
+            if(n<2)return;
+
+            var times=[], i, acc;
+            if(boundaries&&boundaries.length===n){
+                // exact per-word starts from the TTS service
+                for(i=0;i<n;i++)times.push(boundaries[i].offset/1e7); // 100ns ticks -> seconds
             }else{
-                // fallback: char-weighted estimate
+                // No usable per-word timing (or a different tokenisation than
+                // the service used) — spread the clip by word length, still
+                // resolved against the audio clock rather than a timer chain.
                 var totalChars=0;
-                for(var w=0;w<words.length;w++)totalChars+=words[w].length;
-                var totalMs=buf.duration*1000;
-                var delays=[];
-                for(var w=0;w<words.length;w++)delays.push((words[w].length/totalChars)*totalMs);
-                var wi=1;
-                function next(){
-                    if(wi>=words.length){fmClearWordHL();return;}
-                    highlightWord(wi);
-                    fmWordTimer=setTimeout(function(){wi++;next();},delays[wi]);
+                for(i=0;i<n;i++)totalChars+=(spans[i].textContent||"").length||1;
+                acc=0;
+                for(i=0;i<n;i++){
+                    times.push(acc);
+                    acc+=(((spans[i].textContent||"").length||1)/totalChars)*buf.duration;
                 }
-                highlightWord(0);
-                fmWordTimer=setTimeout(function(){next();},delays[0]);
             }
+
+            fmStopWordHL();
+            function tick(){
+                if(!fmAudioCtx){fmStopWordHL();return;}
+                var t=fmAudioCtx.currentTime-t0, wi=0;
+                for(var k=0;k<times.length;k++){if(t>=times[k])wi=k;else break;}
+                highlightSpan(spans,wi);
+                fmHlRAF=requestAnimationFrame(tick);
+            }
+            tick();
         }
         function playBuf(buf,label,boundaries){
             var src=fmAudioCtx.createBufferSource();
@@ -953,8 +957,9 @@ if("serviceWorker" in navigator){
             // TTS volume: 80%
             src.connect(fmAudioCtx.destination);
             src.onended=function(){fmClearWordHL();fmSpeaking=false;updateFmStatusBar();fmAdvance();};
+            var t0=fmAudioCtx.currentTime; // reference for word-highlight timing
             src.start(0);
-            startWordHL(buf,boundaries);
+            startWordHL(buf,boundaries,t0);
             fmDebug(label);
         }
         if(audioBuf){
@@ -1008,9 +1013,14 @@ if("serviceWorker" in navigator){
         tickZh();
     }
 
-    var fmWordTimer=null;
+    var fmHlRAF=null;   // requestAnimationFrame handle for the word highlight
+    var fmHlWord=-1;    // index of the span currently lit, -1 when none
+    function fmStopWordHL(){
+        if(fmHlRAF){cancelAnimationFrame(fmHlRAF);fmHlRAF=null;}
+        fmHlWord=-1;
+    }
     function fmClearWordHL(){
-        if(fmWordTimer){clearTimeout(fmWordTimer);fmWordTimer=null;}
+        fmStopWordHL();
         if(transcriptEl){var hls=transcriptEl.querySelectorAll(".fm-word-hl");for(var i=0;i<hls.length;i++)hls[i].classList.remove("fm-word-hl");}
     }
 
@@ -1026,7 +1036,10 @@ if("serviceWorker" in navigator){
         div.innerHTML='<span class="fm-timestamp">'+(L.time||"")+'</span><div class="fm-text-wrap"><p class="fm-text-en"></p><p class="fm-text-zh"></p></div>';
         transcriptEl.appendChild(div);
         requestAnimationFrame(function(){div.classList.remove("entering");});
-        var enWords=(L.en||"").split(/\s+/);
+        // trim before splitting: stray leading/trailing whitespace would
+        // otherwise yield empty spans, and the span count has to line up
+        // exactly with the word boundaries the TTS worker reports.
+        var enWords=(L.en||"").trim().split(/\s+/);
         var zhWords=(L.zh||"").split(/\s+/);
         fmTypeLine(div, enWords, zhWords);
     }
