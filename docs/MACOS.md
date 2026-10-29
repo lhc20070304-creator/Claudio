@@ -2,6 +2,9 @@
 
 > 这份文档写给 **Mac 上的 agent**，以及准备在 Mac 上跑这个项目的人。
 >
+> 想把活直接派给 Mac agent：用 **[MACOS_PROMPT.md](MACOS_PROMPT.md)** ——
+> 那是一份可以直接整段复制的提示词。
+>
 > 本仓库当前是 **Windows 版本**（Windows 11 上开发和验证）。
 > macOS 版本需要你基于本文 + [API.md](API.md) 搭建。
 > 后端（Flask / AI / 网易云）**几乎不用改**，真正要做事的只有桌面壳和三处平台分支。
