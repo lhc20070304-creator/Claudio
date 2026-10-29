@@ -7,6 +7,11 @@
 ![Flask](https://img.shields.io/badge/Flask-backend-black)
 ![AI](https://img.shields.io/badge/AI-DeepSeek-purple)
 
+> **平台状态：Windows 版本（已验证）**
+> 本仓库当前是 Windows 版本 —— 启动脚本、桌面壳、图标均为 Windows 专用。
+> macOS 移植所需的完整说明见 **[docs/MACOS.md](docs/MACOS.md)**，
+> 全部接口参考见 **[docs/API.md](docs/API.md)**。
+
 ---
 
 ## 🎵 一句话
@@ -93,7 +98,9 @@
 - **Node.js 18+**
 - **DeepSeek API Key**（或其他兼容 OpenAI 格式的 API）
 
-### 方式一：一键启动（推荐）
+> 以下为 **Windows** 启动方式。macOS 请见 [docs/MACOS.md](docs/MACOS.md)。
+
+### 方式一：一键启动（推荐，Windows）
 
 ```bash
 双击 → 启动Claudio.bat
@@ -183,6 +190,10 @@ Claudio/
 │   └── liked.md             #   点赞记录（运行时生成）
 ├── electron/
 │   └── main.js              # Electron 桌面壳（替代实现，需 npm start 手动运行）
+├── docs/
+│   ├── API.md               #   完整接口参考（22 HTTP + 1 WebSocket）
+│   └── MACOS.md             #   macOS 移植指南
+├── start.sh                 # 无窗口启动（仅后端，浏览器访问）
 └── ROADMAP.md               # 路线图与设计文档
 ```
 

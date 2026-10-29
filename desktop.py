@@ -1,37 +1,40 @@
-"""Claudio Desktop — pywebview window"""
+"""Claudio Desktop — pywebview window
+
+Windows 上额外做三件事：DWM 圆角 / 任务栏图标 / edgechromium 内核。
+macOS 上这三件事由系统或 pywebview 自己处理，代码里全部跳过，
+所以这个文件在两个平台上都能直接跑。
+"""
 import sys
 import time
 import socket
 import subprocess
 import threading
 import os
-import ctypes
-from ctypes import wintypes
 
 import webview
 
+IS_WIN = sys.platform == "win32"
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CREATE_NO_WINDOW = 0x08000000
+# creationflags 只在 Windows 有意义；POSIX 上传非 0 值 subprocess 会抛 ValueError
+CREATE_NO_WINDOW = 0x08000000 if IS_WIN else 0
 
-# DWM constants
-DWMWA_WINDOW_CORNER_PREFERENCE = 33
-DWMWCP_ROUND = 2
-WM_SETICON = 0x0080
-ICON_BIG = 1
-ICON_SMALL = 0
+if IS_WIN:
+    import ctypes
+    from ctypes import wintypes
 
-GWL_STYLE = -16
-GWL_EXSTYLE = -20
-WS_CAPTION = 0x00C00000
-WS_THICKFRAME = 0x00040000
-WS_BORDER = 0x00800000
-WS_EX_CLIENTEDGE = 0x00000200
-WS_EX_STATICEDGE = 0x00020000
-WS_EX_DLGMODALFRAME = 0x00000001
-WS_EX_WINDOWEDGE = 0x00000100
+    # DWM constants
+    DWMWA_WINDOW_CORNER_PREFERENCE = 33
+    DWMWCP_ROUND = 2
+    WM_SETICON = 0x0080
+    ICON_BIG = 1
+    ICON_SMALL = 0
+
 
 def nuke_borders():
-    """通过 DwmExtendFrameIntoClientArea 让 DWM 圆角覆盖整个窗口"""
+    """Windows only — 通过 DWM 让圆角覆盖整个无边框窗口"""
+    if not IS_WIN:
+        return
     try:
         user32 = ctypes.windll.user32
         dwmapi = ctypes.windll.dwmapi
@@ -98,17 +101,25 @@ def nuke_borders():
 def kill_port(port):
     """杀掉占用指定端口的进程"""
     try:
-        r = subprocess.run(
-            f'netstat -ano | findstr :{port} | findstr LISTENING',
-            shell=True, capture_output=True, text=True, timeout=5,
-            creationflags=CREATE_NO_WINDOW,
-        )
-        for line in r.stdout.strip().split('\n'):
-            parts = line.split()
-            if parts:
-                pid = parts[-1]
-                subprocess.run(['taskkill', '/F', '/PID', pid],
-                    capture_output=True, creationflags=CREATE_NO_WINDOW)
+        if IS_WIN:
+            r = subprocess.run(
+                f'netstat -ano | findstr :{port} | findstr LISTENING',
+                shell=True, capture_output=True, text=True, timeout=5,
+                creationflags=CREATE_NO_WINDOW,
+            )
+            for line in r.stdout.strip().split('\n'):
+                parts = line.split()
+                if parts:
+                    pid = parts[-1]
+                    subprocess.run(['taskkill', '/F', '/PID', pid],
+                        capture_output=True, creationflags=CREATE_NO_WINDOW)
+        else:
+            r = subprocess.run(
+                ['lsof', '-ti', f'tcp:{port}'],
+                capture_output=True, text=True, timeout=5,
+            )
+            for pid in r.stdout.split():
+                subprocess.run(['kill', '-9', pid], capture_output=True)
     except Exception:
         pass
 
@@ -203,7 +214,7 @@ def main():
     netease_ref = [netease_proc]
     threading.Thread(target=watchdog, args=(netease_ref,), daemon=True).start()
 
-    # Apply DWM rounded corners after a short delay
+    # Apply DWM rounded corners after a short delay (no-op off Windows)
     threading.Timer(0.5, nuke_borders).start()
 
     api = WindowAPI()
@@ -221,7 +232,11 @@ def main():
         background_color="#000000",
     )
     api.set_window(window)
-    webview.start(gui="edgechromium")
+    # Windows 指定 EdgeChromium 内核；macOS 交给 pywebview 自动选择（Cocoa/WebKit）
+    if IS_WIN:
+        webview.start(gui="edgechromium")
+    else:
+        webview.start()
 
     print("[desktop] shutting down...")
     netease_proc.kill()

@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings on checkout, or macOS/Linux fail with
+# "bad interpreter: /bin/bash^M" when the file is launched.
+*.sh      text eol=lf
+*.command text eol=lf
