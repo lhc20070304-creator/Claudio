@@ -207,7 +207,49 @@ def set_macos_dock_icon():
         print(f"[desktop] macOS Dock icon could not be set: {exc}")
 
 
+def main_macos():
+    # Keep ownership of every service, including a replacement started by watchdog.
+    from macos.runtime import Runtime
+    import signal
+
+    def load_app():
+        from app import app
+        return app
+
+    runtime = Runtime(BASE_DIR, load_app)
+    previous_handler = signal.getsignal(signal.SIGTERM)
+    def terminated(signum, frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, terminated)
+    try:
+        runtime.start()
+        api = WindowAPI()
+        window = webview.create_window(
+            title="Claudio", url="http://127.0.0.1:8080?desktop=1", js_api=api,
+            width=565, height=960, min_size=(565, 700), resizable=True,
+            frameless=True, easy_drag=True, on_top=True,
+            transparent=False, background_color="#000000",
+        )
+        api.set_window(window)
+        def bind_macos_controls():
+            from pathlib import Path
+            window.evaluate_js(Path(BASE_DIR, "macos", "window.js").read_text())
+        window.events.loaded += bind_macos_controls
+        set_macos_dock_icon()
+        webview.start()
+    except Exception as exc:
+        print(f"[desktop] macOS startup failed: {exc}", flush=True)
+        raise
+    finally:
+        runtime.stop()
+        signal.signal(signal.SIGTERM, previous_handler)
+        print("[desktop] macOS services stopped", flush=True)
+
+
 def main():
+    if sys.platform == "darwin":
+        return main_macos()
+
     # 0. 清理可能残留的旧进程
     kill_port(3000)
     kill_port(8080)

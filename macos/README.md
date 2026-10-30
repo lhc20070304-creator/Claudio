@@ -17,3 +17,10 @@ NSProcessInfo.processName 和 NSRunningApplication.localizedName 均返回 Claud
 虚拟环境依赖导入、shell 语法和应用签名检查通过。未重启用户正在运行的旧实例，
 台前调度实际显示留待重启后确认。桌面 .app 依赖本机 Python 和桌面项目文件夹，
 不是可直接分发到其他 Mac 的独立安装包。
+
+## 后台回归
+
+- `.venv/bin/python -m unittest discover -s tests -v`：随机端口验证服务生命周期、WebSocket 和窗口失败清理（窗口使用桩）。
+- `node tests/test_macos_ui_logic.cjs`：Mac/Windows 头像绑定以及 FM 音频时钟逐词高亮逻辑，无浏览器、无音频播放。
+- `macos/runtime.py` 仅由 macOS 桌面壳使用，持有 Node 和 Flask 生命周期；端口被其他进程占用时明确报错，不再强杀占用者。
+- 已运行的旧实例需要退出并重新启动才能加载新的服务管理器和单击最小化行为。
