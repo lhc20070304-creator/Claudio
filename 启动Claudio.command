@@ -57,4 +57,9 @@ if [ ! -f config.json ]; then
   fail "请先配置 API Key"
 fi
 
+# .app 内的解释器提供独立的 Cocoa 应用身份，依赖仍来自项目虚拟环境。
+if [ -n "${CLAUDIO_APP_PYTHON:-}" ]; then
+  [ -x "$CLAUDIO_APP_PYTHON" ] || fail "Claudio.app 运行入口缺失，请重新构建应用"
+  exec env __PYVENV_LAUNCHER__="$PWD/.venv/bin/python" "$CLAUDIO_APP_PYTHON" desktop.py
+fi
 exec .venv/bin/python desktop.py
