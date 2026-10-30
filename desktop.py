@@ -190,6 +190,23 @@ class WindowAPI:
             self._window.destroy()
 
 
+
+def set_macos_dock_icon():
+    """Use Claudio's icon for this process only; leave the Python installation alone."""
+    if sys.platform != "darwin":
+        return
+    try:
+        from AppKit import NSApplication, NSImage
+
+        icon_path = os.path.join(BASE_DIR, "static", "claudio-macos.png")
+        icon = NSImage.alloc().initWithContentsOfFile_(icon_path)
+        if icon is None:
+            raise RuntimeError(f"Cannot load Dock icon: {icon_path}")
+        NSApplication.sharedApplication().setApplicationIconImage_(icon)
+    except Exception as exc:
+        print(f"[desktop] macOS Dock icon could not be set: {exc}")
+
+
 def main():
     # 0. 清理可能残留的旧进程
     kill_port(3000)
@@ -236,6 +253,8 @@ def main():
     if IS_WIN:
         webview.start(gui="edgechromium")
     else:
+        # AppKit must run on the main thread, before the Cocoa event loop starts.
+        set_macos_dock_icon()
         webview.start()
 
     print("[desktop] shutting down...")
