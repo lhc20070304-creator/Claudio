@@ -13,7 +13,7 @@ class Runtime:
                  timeout=30, watch_interval=10):
         self.root = Path(root)
         self.app_factory = app_factory
-        self.node_command = node_command or ['node', 'node_modules/NeteaseCloudMusicApi/app.js']
+        self.node_command = node_command or ['node', 'macos/netease.cjs']
         self.node_port, self.flask_port = ports
         self.timeout = timeout
         self.watch_interval = watch_interval
